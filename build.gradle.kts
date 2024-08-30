@@ -21,7 +21,7 @@ val modId: String = "tfcvesseltooltip"
 base {
     archivesName.set("TFCVesselTooltip-$minecraftVersion")
     group = "com.hermitowo.tfcvesseltooltip"
-    version = "1.0"
+    version = "1.1"
 }
 
 java {
