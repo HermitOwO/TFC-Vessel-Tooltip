@@ -63,7 +63,7 @@ public class TFCVesselTooltip
 
                     if (!map.isEmpty())
                     {
-                        text.add(Component.translatable("tfc.tooltip.small_vessel.contents").withStyle(ChatFormatting.DARK_GREEN));
+                        text.add(Helpers.translatable("tfc.tooltip.small_vessel.contents").withStyle(ChatFormatting.DARK_GREEN));
 
                         Alloy alloy = new Alloy();
                         int total = map.values().stream().reduce(0, Integer::sum);
@@ -72,16 +72,16 @@ public class TFCVesselTooltip
                             Metal metal = entry.getKey();
                             int amount = entry.getValue();
                             String percentage = String.format("%.1f", (float) amount / total * 100) + "%";
-                            text.add(Component.translatable("tfcvesseltooltip.tooltip.metal", amount, Component.translatable(metal.getTranslationKey()), Component.literal(percentage).withStyle(ChatFormatting.GREEN)));
+                            text.add(Helpers.translatable("tfcvesseltooltip.tooltip.metal", amount, Helpers.translatable(metal.getTranslationKey()), Helpers.literal(percentage).withStyle(ChatFormatting.GREEN)));
 
                             alloy.add(metal, amount, false);
                         }
 
                         if (map.size() > 1)
                         {
-                            text.add(Component.translatable("tfcvesseltooltip.tooltip.smelts_into").withStyle(ChatFormatting.DARK_GREEN));
+                            text.add(Helpers.translatable("tfcvesseltooltip.tooltip.smelts_into").withStyle(ChatFormatting.DARK_GREEN));
                             Metal result = alloy.getResult(ClientHelpers.getLevelOrThrow());
-                            text.add(Component.translatable("tfcvesseltooltip.tooltip.alloy", total, Component.translatable(result.getTranslationKey())));
+                            text.add(Helpers.translatable("tfcvesseltooltip.tooltip.alloy", total, Helpers.translatable(result.getTranslationKey())));
                         }
                     }
                 }
