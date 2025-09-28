@@ -6,24 +6,24 @@ import java.util.Map;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.ItemStack;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.event.entity.player.ItemTooltipEvent;
-import net.minecraftforge.eventbus.api.EventPriority;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fluids.FluidStack;
-import net.minecraftforge.fml.common.Mod;
+import net.minecraft.world.level.material.Fluid;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.bus.api.EventPriority;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.fml.common.Mod;
+import net.neoforged.neoforge.event.entity.player.ItemTooltipEvent;
+import net.neoforged.neoforge.fluids.FluidStack;
+import net.neoforged.neoforge.fluids.capability.IFluidHandler;
+import org.jetbrains.annotations.Nullable;
 
-import net.dries007.tfc.client.ClientHelpers;
-import net.dries007.tfc.common.capabilities.VesselLike;
+import net.dries007.tfc.common.component.mold.Vessel;
 import net.dries007.tfc.common.items.VesselItem;
 import net.dries007.tfc.common.recipes.HeatingRecipe;
-import net.dries007.tfc.common.recipes.inventory.ItemStackInventory;
-import net.dries007.tfc.util.Alloy;
-import net.dries007.tfc.util.Helpers;
-import net.dries007.tfc.util.Metal;
+import net.dries007.tfc.util.FluidAlloy;
 
 @Mod(TFCVesselTooltip.MOD_ID)
-@Mod.EventBusSubscriber(modid = TFCVesselTooltip.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE, value = Dist.CLIENT)
+@EventBusSubscriber(modid = TFCVesselTooltip.MOD_ID, value = Dist.CLIENT)
 public class TFCVesselTooltip
 {
     public static final String MOD_ID = "tfcvesseltooltip";
@@ -33,58 +33,51 @@ public class TFCVesselTooltip
     {
         final ItemStack stack = event.getItemStack();
         final List<Component> text = event.getToolTip();
-        if (!stack.isEmpty())
+        if (stack.isEmpty())
+            return;
+        if (!(stack.getItem() instanceof VesselItem))
+            return;
+
+        Vessel vessel = Vessel.get(stack);
+        vessel = vessel != null && vessel.isInventory() ? vessel : null;
+        if (vessel == null)
+            return;
+
+        Map<Fluid, Integer> map = new HashMap<>();
+        for (ItemStack item : vessel.contents())
         {
-            if (stack.getItem() instanceof VesselItem)
+            final @Nullable HeatingRecipe recipe = HeatingRecipe.getRecipe(item);
+            if (recipe == null)
+                continue;
+
+            final FluidStack fluid = recipe.assembleFluid(item);
+            if (fluid.isEmpty())
+                continue;
+
+            map.computeIfPresent(fluid.getFluid(), (key, value) -> value + fluid.getAmount() * item.getCount());
+            map.putIfAbsent(fluid.getFluid(), fluid.getAmount() * item.getCount());
+        }
+
+        if (!map.isEmpty())
+        {
+            text.add(Component.translatable("tfc.tooltip.small_vessel.contents").withStyle(ChatFormatting.DARK_GREEN));
+
+            int total = map.values().stream().reduce(0, Integer::sum);
+            for (Map.Entry<Fluid, Integer> entry : map.entrySet())
             {
-                VesselLike vessel = VesselLike.get(stack);
-                vessel = vessel != null && vessel.mode() == VesselLike.Mode.INVENTORY ? vessel : null;
-                if (vessel != null)
-                {
-                    Map<Metal, Integer> map = new HashMap<>();
-                    for (ItemStack item : Helpers.iterate(vessel))
-                    {
-                        final ItemStackInventory inventory = new ItemStackInventory(item);
-                        final HeatingRecipe recipe = HeatingRecipe.getRecipe(inventory);
-                        if (recipe == null)
-                            continue;
+                Fluid fluid = entry.getKey();
+                int amount = entry.getValue();
+                String percentage = String.format("%.1f", (float) amount / total * 100) + "%";
+                text.add(Component.translatable("tfcvesseltooltip.tooltip.metal", amount, fluid.getFluidType().getDescription(), Component.literal(percentage).withStyle(ChatFormatting.GREEN)));
+            }
 
-                        final FluidStack fluid = recipe.assembleFluid(inventory);
-                        if (fluid.isEmpty())
-                            continue;
-
-                        final Metal metal = Metal.get(fluid.getFluid());
-                        if (metal == null)
-                            continue;
-
-                        map.computeIfPresent(metal, (key, value) -> value + fluid.getAmount() * item.getCount());
-                        map.putIfAbsent(metal, fluid.getAmount() * item.getCount());
-                    }
-
-                    if (!map.isEmpty())
-                    {
-                        text.add(Component.translatable("tfc.tooltip.small_vessel.contents").withStyle(ChatFormatting.DARK_GREEN));
-
-                        Alloy alloy = new Alloy();
-                        int total = map.values().stream().reduce(0, Integer::sum);
-                        for (Map.Entry<Metal, Integer> entry : map.entrySet())
-                        {
-                            Metal metal = entry.getKey();
-                            int amount = entry.getValue();
-                            String percentage = String.format("%.1f", (float) amount / total * 100) + "%";
-                            text.add(Component.translatable("tfcvesseltooltip.tooltip.metal", amount, Component.translatable(metal.getTranslationKey()), Component.literal(percentage).withStyle(ChatFormatting.GREEN)));
-
-                            alloy.add(metal, amount, false);
-                        }
-
-                        if (map.size() > 1)
-                        {
-                            text.add(Component.translatable("tfcvesseltooltip.tooltip.smelts_into").withStyle(ChatFormatting.DARK_GREEN));
-                            Metal result = alloy.getResult(ClientHelpers.getLevelOrThrow());
-                            text.add(Component.translatable("tfcvesseltooltip.tooltip.alloy", total, Component.translatable(result.getTranslationKey())));
-                        }
-                    }
-                }
+            if (map.size() > 1)
+            {
+                text.add(Component.translatable("tfcvesseltooltip.tooltip.smelts_into").withStyle(ChatFormatting.DARK_GREEN));
+                FluidAlloy alloy = FluidAlloy.empty();
+                Vessel.ContainerInfo containerInfo = vessel.containerInfo();
+                map.forEach((fluid, amount) -> alloy.fill(new FluidStack(fluid, amount), IFluidHandler.FluidAction.EXECUTE, containerInfo));
+                text.add(Component.translatable("tfcvesseltooltip.tooltip.alloy", total, alloy.getResult().getHoverName()));
             }
         }
     }
